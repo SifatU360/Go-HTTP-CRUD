@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"slices"
+	"os"
+
+	// "slices"
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/joho/godotenv"
 )
 
 var db *pgx.Conn
@@ -38,7 +41,7 @@ var user = []User{
 
 func connectDB(){
 	var err error
-	connStr := "postgres://postgres:1234@localhost:5432/go_crud"
+	connStr := os.Getenv("DB_STRING")
 	db, err = pgx.Connect(context.Background(), connStr)
 	if err != nil {
 		panic(err)
@@ -48,7 +51,15 @@ func connectDB(){
 }
 
 func main() {
+	var err error
+
+	err = godotenv.Load()
+	if err != nil{
+		panic("Env not found")
+	}
+
 	connectDB()
+	defer db.Close(context.Background())
 
 	mux := http.NewServeMux()
 
@@ -63,7 +74,7 @@ func main() {
 
 	fmt.Println("Server is running at port 5000...")
 
-	err := http.ListenAndServe(":5000", mux)
+	err = http.ListenAndServe(":5000", mux)
 
 	if err != nil {
 		fmt.Println("Server Error .. ", err)
@@ -175,12 +186,27 @@ func getSingleUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, usr := range user{
-		if usr.Id == id {
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(usr)
-			return
-		}
+	// for _, usr := range user{
+	// 	if usr.Id == id {
+	// 		w.Header().Set("Content-Type", "application/json")
+	// 		json.NewEncoder(w).Encode(usr)
+	// 		return
+	// 	}
+	// }
+
+	var user User
+	query := `SELECT id, username, age, email FROM users WHERE id = $1`
+	err = db.QueryRow(context.Background(), query, id).Scan(&user.Id, &user.Name, &user.Age, &user.Email)
+	if err == pgx.ErrNoRows{
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintln(w, "User not found")
+		return
+	}
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, "Could not get User")
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -258,16 +284,34 @@ func deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for idx, usr := range user{
-		if usr.Id == id {
-			// user = append(user[:idx], user[idx+1:]... )
-			user = slices.Delete(user, idx, idx+1)
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+	// for idx, usr := range user{
+	// 	if usr.Id == id {
+	// 		// user = append(user[:idx], user[idx+1:]... )
+	// 		user = slices.Delete(user, idx, idx+1)
+	// 		w.WriteHeader(http.StatusNoContent)
+	// 		return
+	// 	}
+	// }
+
+	query := `
+		delete from users where id = $1
+	`
+
+	cmdTag, err := db.Exec(context.Background(), query, id)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, "Could not Delete User")
+		return
+	}
+
+	if cmdTag.RowsAffected() != 1{
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintln(w, "User Not Found")
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotFound)
-	fmt.Fprintln(w,"User Not Found ..!")
+	w.WriteHeader(http.StatusNoContent)
+	fmt.Fprintln(w,"User deleted Successfully ..!")
 }
