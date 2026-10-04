@@ -152,9 +152,17 @@ func getUserHandler(w http.ResponseWriter, r *http.Request) {
 		users = append(users, user)
 	}
 
+	err = rows.Err()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, "Could not read user")
+		return
+	}
+
 	encoder := json.NewEncoder(w) // it done by stream and write , memory efficient
 	encoder.Encode(users)
 }
+
 func getSingleUserHandler(w http.ResponseWriter, r *http.Request) {
 	idParam := r.PathValue("id")
 	// fmt.Printf("The value of id is %v and the type of value is %T", idParam, idParam)
@@ -179,6 +187,7 @@ func getSingleUserHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	fmt.Fprintln(w,"User Not Found ..!")
 }
+
 func updateUserHandler(w http.ResponseWriter, r *http.Request) {
 	idParam := r.PathValue("id")
 	// fmt.Printf("The value of id is %v and the type of value is %T", idParam, idParam)
@@ -199,21 +208,46 @@ func updateUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for idx, usr := range user{
-		if usr.Id == id {
-			updatedUser.Id = id
-			user[idx] = updatedUser
+	// for idx, usr := range user{
+	// 	if usr.Id == id {
+	// 		updatedUser.Id = id
+	// 		user[idx] = updatedUser
 
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(updatedUser)
-			return
-		}
+	// 		w.Header().Set("Content-Type", "application/json")
+	// 		json.NewEncoder(w).Encode(updatedUser)
+	// 		return
+	// 	}
+	// }
+
+	// w.Header().Set("Content-Type", "application/json")
+	// w.WriteHeader(http.StatusNotFound)
+	// fmt.Fprintln(w,"User Not Found ..!")
+
+	query := `
+		update users
+		set username = $1, age = $2, email = $3
+		where id = $4
+		returning id, username, age, email
+	`
+
+	err = db.QueryRow(context.Background(), query, updatedUser.Name, updatedUser.Age, updatedUser.Email, id).Scan(&updatedUser.Id,&updatedUser.Name, &updatedUser.Age, &updatedUser.Email)
+
+	if err == pgx.ErrNoRows {
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprintln(w, "User Not Found")
+		return
+	}
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, "Could Not Update User")
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotFound)
-	fmt.Fprintln(w,"User Not Found ..!")
+	json.NewEncoder(w).Encode(updatedUser)
 }
+
 func deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 	idParam := r.PathValue("id")
 	id, err := strconv.Atoi(idParam)
