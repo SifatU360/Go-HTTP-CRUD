@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
+
+	"github.com/jackc/pgx/v5"
 )
+
+var db *pgx.Conn
 
 //  `json:"id` -> when convert in json then send like id not Id
 type User struct {
@@ -31,7 +36,20 @@ var user = []User{
 	},
 }
 
+func connectDB(){
+	var err error
+	connStr := "postgres://postgres:1234@localhost:5432/go_crud"
+	db, err = pgx.Connect(context.Background(), connStr)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Database connected successfully..!!")
+}
+
 func main() {
+	connectDB()
+
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", rootHandler)
@@ -82,8 +100,23 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newUser.Id = len(user) + 1
-	user = append(user, newUser)
+	// Using Slice -> static DB
+	// newUser.Id = len(user) + 1
+	// user = append(user, newUser)
+
+
+	query := `
+		insert into users(username, age, email)
+		values ($1, $2, $3)
+		returning id
+	`
+
+	err = db.QueryRow(context.Background(), query, newUser.Name, newUser.Age, newUser.Email).Scan(&newUser.Id)
+	if err != nil{
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, "Could not create user")
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(newUser)
@@ -94,8 +127,33 @@ func getUserHandler(w http.ResponseWriter, r *http.Request) {
 	// user, _ := json.Marshal(user) //json.Mershal -> first it save into memory then write with w.Write
 	// w.Write(user)
 
+	query := `select id, username, age, email from users`
+
+	rows, err := db.Query(context.Background(), query)
+	if err != nil{
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, "Could not get users")
+		return
+	}
+
+	defer rows.Close()
+
+	var users []User
+
+	for rows.Next() {
+		var user User
+
+		err := rows.Scan(&user.Id, &user.Name, &user.Age, &user.Email)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		 	fmt.Fprintln(w, "Could not scan user")
+			return
+		}
+		users = append(users, user)
+	}
+
 	encoder := json.NewEncoder(w) // it done by stream and write , memory efficient
-	encoder.Encode(user)
+	encoder.Encode(users)
 }
 func getSingleUserHandler(w http.ResponseWriter, r *http.Request) {
 	idParam := r.PathValue("id")
@@ -168,8 +226,8 @@ func deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	for idx, usr := range user{
 		if usr.Id == id {
-			user = append(user[:idx], user[idx+1:]... )
-			// user = slices.Delete(user, idx, idx+1)
+			// user = append(user[:idx], user[idx+1:]... )
+			user = slices.Delete(user, idx, idx+1)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
