@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go_http_crud/db"
 	"net/http"
 	"strconv"
 
@@ -49,7 +50,7 @@ func createUserHandler(w http.ResponseWriter, r *http.Request) {
 		returning id
 	`
 
-	err = db.QueryRow(context.Background(), query, newUser.Name, newUser.Age, newUser.Email).Scan(&newUser.Id)
+	err = db.Db.QueryRow(context.Background(), query, newUser.Name, newUser.Age, newUser.Email).Scan(&newUser.Id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintln(w, "Could not create user")
@@ -67,7 +68,7 @@ func getUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	query := `select id, username, age, email from users`
 
-	rows, err := db.Query(context.Background(), query)
+	rows, err := db.Db.Query(context.Background(), query)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintln(w, "Could not get users")
@@ -123,7 +124,7 @@ func getSingleUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	var user User
 	query := `SELECT id, username, age, email FROM users WHERE id = $1`
-	err = db.QueryRow(context.Background(), query, id).Scan(&user.Id, &user.Name, &user.Age, &user.Email)
+	err = db.Db.QueryRow(context.Background(), query, id).Scan(&user.Id, &user.Name, &user.Age, &user.Email)
 	if err == pgx.ErrNoRows {
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprintln(w, "User not found")
@@ -183,7 +184,7 @@ func updateUserHandler(w http.ResponseWriter, r *http.Request) {
 		returning id, username, age, email
 	`
 
-	err = db.QueryRow(context.Background(), query, updatedUser.Name, updatedUser.Age, updatedUser.Email, id).Scan(&updatedUser.Id, &updatedUser.Name, &updatedUser.Age, &updatedUser.Email)
+	err = db.Db.QueryRow(context.Background(), query, updatedUser.Name, updatedUser.Age, updatedUser.Email, id).Scan(&updatedUser.Id, &updatedUser.Name, &updatedUser.Age, &updatedUser.Email)
 
 	if err == pgx.ErrNoRows {
 		w.WriteHeader(http.StatusNotFound)
@@ -224,7 +225,7 @@ func deleteUserHandler(w http.ResponseWriter, r *http.Request) {
 		delete from users where id = $1
 	`
 
-	cmdTag, err := db.Exec(context.Background(), query, id)
+	cmdTag, err := db.Db.Exec(context.Background(), query, id)
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

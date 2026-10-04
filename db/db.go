@@ -1,4 +1,4 @@
-package main
+package db
 
 import (
 	"context"
@@ -8,14 +8,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var db *pgx.Conn
+var Db *pgx.Conn
 
 //  `json:"id` -> when convert in json then send like id not Id
 
-func connectDB() {
+func ConnectDB() {
 	var err error
 	connStr := os.Getenv("DB_STRING")
-	db, err = pgx.Connect(context.Background(), connStr)
+	Db, err = pgx.Connect(context.Background(), connStr)
 	if err != nil {
 		panic(err)
 	}

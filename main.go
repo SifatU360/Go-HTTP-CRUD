@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"go_http_crud/db"
 	"net/http"
 
 	// "slices"
@@ -18,8 +19,8 @@ func main() {
 		panic("Env not found")
 	}
 
-	connectDB()
-	defer db.Close(context.Background())
+	db.ConnectDB()
+	defer db.Db.Close(context.Background())
 
 	mux := http.NewServeMux()
 
